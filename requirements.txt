@@ -1,0 +1,24 @@
+# Geotechnical Analysis Application
+# Dependencies
+
+# Core Framework
+streamlit>=1.28.0
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.8.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Report Generation
+reportlab>=4.0.0
+openpyxl>=3.1.0
+Pillow>=10.0.0
+
+# Development (optional)
+pytest>=7.0.0

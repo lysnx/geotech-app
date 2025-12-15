@@ -1,0 +1,29 @@
+﻿# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.class
+*.so
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output files
+output/
+
+# Logs
+*.log
+setup_log.txt
+
+# Agent folder
+.agent/
