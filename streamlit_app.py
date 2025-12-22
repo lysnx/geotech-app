@@ -4,18 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.core.models import SoilProperties, FoundationGeometry, AnalysisParameters, MohrCircle, FailureEnvelope
+from src.core.models import SoilProperties, FoundationGeometry, AnalysisParameters, MohrCircle, FailureEnvelope, TriaxialTestSample, TriaxialTestSeries
 from src.core.simulation import run_consolidation_analysis, get_results_as_dict
 from src.vis.plotting import plot_mohr_diagram, plot_stress_profiles, plot_safety_factor_evolution
+from src.vis.plotting_enhanced import plot_multiple_mohr_circles, plot_triaxial_test_results
 
-st.set_page_config(page_title='Geotechnical Analysis', page_icon='', layout='wide', initial_sidebar_state='expanded')
+st.set_page_config(page_title='Geotechnical Analysis Pro', page_icon='', layout='wide', initial_sidebar_state='expanded')
 
 st.markdown('''<style>
     .main-header {font-size: 2.5rem; font-weight: bold; color: #2c3e50; text-align: center; padding: 1rem 0; border-bottom: 3px solid #3498db; margin-bottom: 2rem;}
     .section-header {font-size: 1.5rem; font-weight: bold; color: #34495e; padding: 0.5rem 0; border-left: 4px solid #3498db; padding-left: 1rem; margin: 1rem 0;}
+    .stButton>button {background-color: #3498db; color: white; border-radius: 8px;}
 </style>''', unsafe_allow_html=True)
 
 SOIL_PRESETS = {
@@ -27,39 +30,55 @@ SOIL_PRESETS = {
 }
 
 def init_session():
-    for key in ['analysis_complete', 'results', 'results_dict', 'soil', 'foundation', 'params']:
+    defaults = {
+        'analysis_complete': False, 'results': None, 'results_dict': None,
+        'soil': None, 'foundation': None, 'params': None,
+        'triaxial_samples': [], 'triaxial_test_type': 'CU'
+    }
+    for key, val in defaults.items():
         if key not in st.session_state:
-            st.session_state[key] = None if key != 'analysis_complete' else False
+            st.session_state[key] = val
 
 def main():
     init_session()
     st.sidebar.markdown('## Navigation')
-    page = st.sidebar.radio('Select Page', ['Home', 'Input Parameters', 'Analysis Results', 'Mohr Explorer', 'Help'])
+    page = st.sidebar.radio('Select Page', [
+        'Home', 'Input Parameters', 'Analysis Results', 'Mohr Explorer',
+        'Triaxial Tests', 'Help'
+    ])
     st.sidebar.markdown('---')
-    st.sidebar.markdown('### Status')
+    st.sidebar.markdown('### Quick Status')
     if st.session_state.analysis_complete and st.session_state.results:
         crit = st.session_state.results.find_critical_condition()
         if crit['min_fs']:
             fs = crit['min_fs']
-            if fs < 1.0: st.sidebar.error(f'Min FS: {fs:.2f} (FAILED)')
-            elif fs < 1.5: st.sidebar.warning(f'Min FS: {fs:.2f} (MARGINAL)')
-            else: st.sidebar.success(f'Min FS: {fs:.2f} (SAFE)')
+            if fs < 1.0: st.sidebar.error(f'Min FS: {fs:.2f} FAILED')
+            elif fs < 1.5: st.sidebar.warning(f'Min FS: {fs:.2f} MARGINAL')
+            else: st.sidebar.success(f'Min FS: {fs:.2f} SAFE')
     else:
         st.sidebar.info('No analysis yet')
     
-    if page == 'Home': show_home()
-    elif page == 'Input Parameters': show_input()
-    elif page == 'Analysis Results': show_results()
-    elif page == 'Mohr Explorer': show_explorer()
-    elif page == 'Help': show_help()
+    pages = {
+        'Home': show_home, 'Input Parameters': show_input, 'Analysis Results': show_results,
+        'Mohr Explorer': show_explorer, 'Triaxial Tests': show_triaxial, 'Help': show_help
+    }
+    pages[page]()
 
 def show_home():
-    st.markdown('<div class="main-header">Geotechnical Analysis System</div>', unsafe_allow_html=True)
-    st.markdown('''Welcome to the **Geotechnical Soil Analysis Application**. This tool performs:
-    - Plane strain consolidation analysis using Terzaghi theory
-    - Mohr-Coulomb failure criterion evaluation
-    - Publication-quality visualizations of stress states
-    - Safety factor calculations at any depth and time''')
+    st.markdown('<div class="main-header">Geotechnical Analysis System Pro</div>', unsafe_allow_html=True)
+    st.markdown('''
+    Welcome to the **Professional Geotechnical Analysis Application**!
+    
+    ### Features
+    - **Consolidation Analysis**: Terzaghi theory with Mohr-Coulomb failure
+    - **Triaxial Tests**: UU, CU, CD test support with automatic envelope fitting
+    - **Multiple Mohr Circles**: Visualize many circles simultaneously
+    
+    ### Getting Started
+    1. Go to **Input Parameters** to define soil and loading
+    2. Run analysis and view **Results**
+    3. Use **Triaxial Tests** to input lab data
+    ''')
 
 def show_input():
     st.markdown('<div class="main-header">Input Parameters</div>', unsafe_allow_html=True)
@@ -85,7 +104,8 @@ def show_input():
         max_depth = st.number_input('Max Analysis Depth (m)', 5.0, 50.0, 10.0)
         water_table = st.number_input('Water Table Depth (m)', 0.0, max_depth, 2.0)
         depth_incr = st.number_input('Depth Increment (m)', 0.1, 2.0, 0.5)
-        time_stages = st.text_input('Time Stages (days, comma-separated)', '0, 1, 7, 30, 365')
+        time_stages = st.text_input('Time Stages (days)', '0, 1, 7, 30, 90, 180, 365')
+    
     if st.button('Run Analysis', type='primary', use_container_width=True):
         try:
             times = [float(t.strip()) for t in time_stages.split(',')]
@@ -101,7 +121,7 @@ def show_input():
             st.session_state.foundation = foundation
             st.session_state.params = params
             st.session_state.analysis_complete = True
-            st.success('Analysis complete! Go to Analysis Results to view.')
+            st.success('Analysis complete!')
             crit = results.find_critical_condition()
             if crit['min_fs']:
                 c1, c2, c3 = st.columns(3)
@@ -119,13 +139,15 @@ def show_results():
     results = st.session_state.results
     results_dict = st.session_state.results_dict
     soil = st.session_state.soil
-    tab1, tab2, tab3 = st.tabs(['Critical Condition', 'Stress Profiles', 'FS Evolution'])
+    
+    tab1, tab2, tab3, tab4 = st.tabs(['Critical Condition', 'Stress Profiles', 'FS Evolution', 'All Mohr Circles'])
+    
     with tab1:
         crit = results.find_critical_condition()
         if crit['min_fs']:
             c1, c2, c3, c4 = st.columns(4)
             fs = crit['min_fs']
-            c1.metric('Safety Factor', f'{fs:.2f}', delta='FAILED' if fs < 1 else ('MARGINAL' if fs < 1.5 else 'SAFE'))
+            c1.metric('Safety Factor', f'{fs:.2f}')
             c2.metric('Critical Depth', f"{crit['depth']:.1f} m")
             c3.metric('Critical Time', f"{crit['time_days']:.0f} days")
             c4.metric('Status', crit['status'])
@@ -137,23 +159,35 @@ def show_results():
                 fig = plot_mohr_diagram([mohr], envelope, [f"z={crit['depth']:.1f}m"], title=f'Critical Mohr Circle (FS={fs:.2f})')
                 st.pyplot(fig)
                 plt.close(fig)
+    
     with tab2:
         if results_dict:
             fig = plot_stress_profiles(results_dict, st.session_state.params.time_stages)
             st.pyplot(fig)
             plt.close(fig)
+    
     with tab3:
         depths = sorted(set(k[0] for k in results.safety_factors.keys()))
-        selected_depth = st.select_slider('Select Depth for FS Evolution', options=depths, value=depths[len(depths)//2] if depths else 0)
+        selected_depth = st.select_slider('Select Depth', options=depths, value=depths[len(depths)//2] if depths else 0)
         if results_dict:
             fig = plot_safety_factor_evolution(results_dict, selected_depth)
             st.pyplot(fig)
             plt.close(fig)
+    
+    with tab4:
+        st.markdown('### All Mohr Circles from Analysis')
+        selected_time = st.selectbox('Select Time (days)', sorted(set(k[1] for k in results.mohr_circles.keys())))
+        circles_at_time = [results.mohr_circles[k] for k in results.mohr_circles.keys() if k[1] == selected_time]
+        labels = [f"z={k[0]:.1f}m" for k in results.mohr_circles.keys() if k[1] == selected_time]
+        envelope = FailureEnvelope(cohesion_c=soil.cohesion_c, friction_angle_phi=soil.friction_angle_phi)
+        fig = plot_multiple_mohr_circles(circles_at_time, envelope, labels, f'All Mohr Circles at t={selected_time:.0f} days')
+        st.pyplot(fig)
+        plt.close(fig)
 
 def show_explorer():
     st.markdown('<div class="main-header">Mohr Circle Explorer</div>', unsafe_allow_html=True)
     if not st.session_state.analysis_complete:
-        st.warning('No analysis results. Please run an analysis first.')
+        st.warning('Run analysis first.')
         return
     results = st.session_state.results
     soil = st.session_state.soil
@@ -175,25 +209,106 @@ def show_explorer():
         c3.metric('Center (kPa)', f'{mohr.center:.1f}')
         c4.metric('Radius (kPa)', f'{mohr.radius:.1f}')
         c5.metric('Safety Factor', f'{fs:.2f}')
-        st.markdown('---')
-        fig = plot_mohr_diagram([mohr], envelope, [f'z={selected_depth:.1f}m, t={selected_time:.0f}d'], title=f'Mohr Circle at z={selected_depth:.1f}m, t={selected_time:.0f}d')
+        fig = plot_mohr_diagram([mohr], envelope, [f'z={selected_depth:.1f}m'])
         st.pyplot(fig)
         plt.close(fig)
 
+def show_triaxial():
+    st.markdown('<div class="main-header">Triaxial Test Analysis</div>', unsafe_allow_html=True)
+    st.markdown('Enter triaxial test data to determine shear strength parameters (c and phi)')
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown('### Test Configuration')
+        test_type = st.selectbox('Test Type', ['CU', 'CD', 'UU'], help='CU=Consolidated Undrained, CD=Consolidated Drained, UU=Unconsolidated Undrained')
+        st.session_state.triaxial_test_type = test_type
+        
+        num_samples = st.number_input('Number of Samples', 2, 20, 3)
+        
+        st.markdown('### Add Sample Data')
+        samples_data = []
+        for i in range(int(num_samples)):
+            with st.expander(f'Sample {i+1}', expanded=(i < 3)):
+                sigma3 = st.number_input(f'Confining Pressure sigma3 (kPa)', 0.0, 1000.0, 50.0 + i*50, key=f'sig3_{i}')
+                deviator = st.number_input(f'Deviator Stress at Failure (kPa)', 0.0, 2000.0, 100.0 + i*30, key=f'dev_{i}')
+                pore_p = 0.0
+                if test_type == 'CU':
+                    pore_p = st.number_input(f'Pore Pressure at Failure (kPa)', 0.0, 500.0, 20.0 + i*10, key=f'pp_{i}')
+                samples_data.append({
+                    'id': f'S{i+1}',
+                    'sigma3': sigma3,
+                    'deviator': deviator,
+                    'pore_pressure': pore_p
+                })
+    
+    with col2:
+        if st.button('Analyze Triaxial Tests', type='primary', use_container_width=True):
+            try:
+                series = TriaxialTestSeries(samples=[], test_type=test_type)
+                for s in samples_data:
+                    sample = TriaxialTestSample(
+                        sample_id=s['id'],
+                        confining_pressure_sigma3=s['sigma3'],
+                        deviator_stress_at_failure=s['deviator'],
+                        pore_pressure_at_failure=s['pore_pressure'],
+                        test_type=test_type
+                    )
+                    series.add_sample(sample)
+                
+                c, phi = series.calculate_failure_envelope()
+                st.success(f"**Results**: Cohesion c' = {c:.2f} kPa, Friction Angle phi' = {phi:.1f} deg")
+                
+                c1, c2 = st.columns(2)
+                c1.metric("Cohesion c' (kPa)", f'{c:.2f}')
+                c2.metric("Friction Angle phi' (deg)", f'{phi:.1f}')
+                
+                st.markdown('### Mohr Circles with Fitted Envelope')
+                fig = plot_triaxial_test_results(series, f'{test_type} Triaxial Test Results ({len(samples_data)} samples)')
+                st.pyplot(fig)
+                plt.close(fig)
+                
+                st.markdown('### Test Data Summary')
+                df_data = []
+                for s in series.samples:
+                    df_data.append({
+                        'Sample': s.sample_id,
+                        'sigma3 (kPa)': s.confining_pressure_sigma3,
+                        'Deviator (kPa)': s.deviator_stress_at_failure,
+                        'sigma1 (kPa)': s.sigma_1_total,
+                        'Pore Pressure (kPa)': s.pore_pressure_at_failure,
+                        "sigma1' (kPa)": s.sigma_1_effective,
+                        "sigma3' (kPa)": s.sigma_3_effective
+                    })
+                st.dataframe(pd.DataFrame(df_data), use_container_width=True)
+                
+            except Exception as e:
+                st.error(f'Error: {str(e)}')
+
 def show_help():
     st.markdown('<div class="main-header">Help and Documentation</div>', unsafe_allow_html=True)
+    
     with st.expander('Physics Overview', expanded=True):
-        st.markdown('''### Terzaghi Effective Stress Principle
-sigma_eff = sigma_total - u
-
-### Mohr-Coulomb Failure Criterion
-tau_f = c + sigma_eff * tan(phi)''')
+        st.markdown('### Terzaghi Effective Stress Principle')
+        st.latex(r"\sigma' = \sigma - u")
+        st.markdown('### Mohr-Coulomb Failure Criterion')
+        st.latex(r"\tau_f = c + \sigma' \tan(\phi)")
+        
     with st.expander('Safety Factor'):
-        st.markdown('''FS = R_failure / R_circle
-
-- **FS > 1.5**: Safe
-- **1.0 < FS < 1.5**: Marginal
-- **FS < 1.0**: Failed''')
+        st.markdown('''
+        FS = R_failure / R_circle
+        - **FS > 1.5**: Safe
+        - **1.0 < FS < 1.5**: Marginal
+        - **FS < 1.0**: Failed
+        ''')
+    
+    with st.expander('Triaxial Test Types'):
+        st.markdown('''
+        | Test | Consolidation | Drainage during Shear | Use |
+        |------|--------------|----------------------|-----|
+        | **UU** | No | No | Quick loading, short-term |
+        | **CU** | Yes | No | Medium-term stability |
+        | **CD** | Yes | Yes | Long-term drained analysis |
+        ''')
 
 if __name__ == '__main__':
     main()

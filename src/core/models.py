@@ -184,3 +184,78 @@ class AnalysisResult:
         min_fs = self.safety_factors[min_key]
         return {"min_fs": min_fs, "depth": min_key[0], "time_days": min_key[1],
                 "status": "SAFE" if min_fs > 1.0 else "FAILED"}
+
+@dataclass
+class TriaxialTestSample:
+    """Data for a single triaxial test sample."""
+    sample_id: str
+    confining_pressure_sigma3: float  # kPa
+    deviator_stress_at_failure: float  # kPa (sigma1 - sigma3)
+    pore_pressure_at_failure: float = 0.0  # kPa (for CU tests)
+    test_type: str = "CU"  # CD, CU, or UU
+    
+    @property
+    def sigma_1_total(self) -> float:
+        return self.confining_pressure_sigma3 + self.deviator_stress_at_failure
+    
+    @property
+    def sigma_3_total(self) -> float:
+        return self.confining_pressure_sigma3
+    
+    @property
+    def sigma_1_effective(self) -> float:
+        return self.sigma_1_total - self.pore_pressure_at_failure
+    
+    @property
+    def sigma_3_effective(self) -> float:
+        return self.sigma_3_total - self.pore_pressure_at_failure
+    
+    def get_mohr_circle(self, use_effective: bool = True) -> MohrCircle:
+        if use_effective and self.test_type in ["CU", "CD"]:
+            return MohrCircle(self.sigma_1_effective, self.sigma_3_effective)
+        return MohrCircle(self.sigma_1_total, self.sigma_3_total)
+
+
+@dataclass
+class TriaxialTestSeries:
+    """Collection of triaxial test samples for envelope determination."""
+    samples: List[TriaxialTestSample] = field(default_factory=list)
+    test_type: str = "CU"
+    
+    def add_sample(self, sample: TriaxialTestSample):
+        self.samples.append(sample)
+    
+    def get_all_mohr_circles(self, use_effective: bool = True) -> List[MohrCircle]:
+        return [s.get_mohr_circle(use_effective) for s in self.samples]
+    
+    def calculate_failure_envelope(self, use_effective: bool = True) -> Tuple[float, float]:
+        """Calculate c and phi from Mohr circles using linear regression."""
+        if len(self.samples) < 2:
+            return 0.0, 30.0
+        
+        circles = self.get_all_mohr_circles(use_effective)
+        p_values = np.array([c.center for c in circles])
+        q_values = np.array([c.radius for c in circles])
+        
+        n = len(p_values)
+        sum_p = np.sum(p_values)
+        sum_q = np.sum(q_values)
+        sum_pq = np.sum(p_values * q_values)
+        sum_p2 = np.sum(p_values ** 2)
+        
+        denom = n * sum_p2 - sum_p ** 2
+        if abs(denom) < 1e-10:
+            return 0.0, 30.0
+        
+        sin_phi = (n * sum_pq - sum_p * sum_q) / denom
+        sin_phi = min(max(sin_phi, 0), 0.99)
+        
+        a = (sum_q - sin_phi * sum_p) / n
+        phi_rad = math.asin(sin_phi)
+        phi_deg = math.degrees(phi_rad)
+        
+        cos_phi = math.cos(phi_rad)
+        c = a / cos_phi if cos_phi > 0.01 else 0.0
+        c = max(0, c)
+        
+        return c, phi_deg

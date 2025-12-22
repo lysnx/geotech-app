@@ -1,6 +1,8 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Mohr Circle and Envelope Plotting
+COURSE NOTATION: sigma = shear stress, tau = normal stress
+X-axis: sigma (shear), Y-axis: tau (normal)
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,9 +28,10 @@ def plot_mohr_circles(
 ) -> plt.Figure:
     """
     Plot Mohr circles with optional failure envelope.
+    COURSE NOTATION: sigma = shear stress (X-axis), tau = normal stress (Y-axis)
     
     Args:
-        circles: List of (sigma_1, sigma_3) tuples
+        circles: List of (tau_1, tau_3) tuples (principal normal stresses)
         envelope_c: Cohesion for envelope (kPa)
         envelope_phi_rad: Friction angle for envelope (radians)
         labels: Labels for each circle
@@ -46,62 +49,73 @@ def plot_mohr_circles(
         ax.text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=16)
         return fig
     
-    all_sigma1 = [c[0] for c in circles]
-    all_sigma3 = [c[1] for c in circles]
+    # circles contains (tau_1, tau_3) - principal normal stresses
+    all_tau1 = [c[0] for c in circles]
+    all_tau3 = [c[1] for c in circles]
     
-    max_sigma = max(all_sigma1) * 1.3
-    min_sigma = min(min(all_sigma3), 0) - 10
-    max_radius = max((s1 - s3) / 2 for s1, s3 in circles)
+    max_tau = max(all_tau1) * 1.3
+    min_tau = min(min(all_tau3), 0) - 10
+    max_radius = max((t1 - t3) / 2 for t1, t3 in circles)
     
     if envelope_c is not None and envelope_phi_rad is not None and show_envelope:
-        envelope_tau = envelope_c + max_sigma * math.tan(envelope_phi_rad)
-        max_tau = max(max_radius * 1.4, envelope_tau * 1.1)
+        envelope_sigma = envelope_c + max_tau * math.tan(envelope_phi_rad)
+        max_sigma = max(max_radius * 1.4, envelope_sigma * 1.1)
     else:
-        max_tau = max_radius * 1.5
+        max_sigma = max_radius * 1.5
     
-    ax.set_xlim(min_sigma, max_sigma)
-    ax.set_ylim(-max_tau * 0.1, max_tau)
+    # X = sigma (shear), Y = tau (normal)
+    ax.set_xlim(-max_sigma * 0.1, max_sigma)
+    ax.set_ylim(min_tau, max_tau)
     
+    # Plot failure envelope
     if envelope_c is not None and envelope_phi_rad is not None and show_envelope:
-        sigma_env = np.linspace(0, max_sigma * 1.1, 100)
-        tau_env = envelope_c + sigma_env * np.tan(envelope_phi_rad)
+        # Envelope: sigma_failure = c + tau * tan(phi)
+        tau_env = np.linspace(0, max_tau * 1.1, 100)
+        sigma_env = envelope_c + tau_env * np.tan(envelope_phi_rad)
         
-        verts = [(0, envelope_c)] + list(zip(sigma_env, tau_env))
-        verts += [(max_sigma * 1.1, max_tau * 1.2), (0, max_tau * 1.2)]
+        # Shaded failure region
+        verts = [(envelope_c, 0)] + list(zip(sigma_env, tau_env))
+        verts += [(max_sigma * 1.2, max_tau * 1.1), (max_sigma * 1.2, 0)]
         ax.add_patch(Polygon(verts, facecolor='#fadbd8', edgecolor='none', alpha=0.4, zorder=1))
         
         phi_deg = math.degrees(envelope_phi_rad)
         ax.plot(sigma_env, tau_env, color='#e74c3c', linewidth=3,
                label=f"Envelope: c={envelope_c:.1f} kPa, phi={phi_deg:.1f} deg", zorder=10)
-        ax.scatter([0], [envelope_c], color='#e74c3c', s=100, zorder=15)
+        ax.scatter([envelope_c], [0], color='#e74c3c', s=100, zorder=15)
     
-    for i, (sigma_1, sigma_3) in enumerate(circles):
+    # Plot Mohr circles
+    for i, (tau_1, tau_3) in enumerate(circles):
         color = COLORS[i % len(COLORS)]
         label = labels[i] if labels and i < len(labels) else f'Test {i+1}'
         
-        center = (sigma_1 + sigma_3) / 2
-        radius = (sigma_1 - sigma_3) / 2
+        center = (tau_1 + tau_3) / 2
+        radius = (tau_1 - tau_3) / 2
         
         theta = np.linspace(0, np.pi, 100)
-        sigma = center + radius * np.cos(theta)
-        tau = radius * np.sin(theta)
+        tau = center + radius * np.cos(theta)    # Normal stress (Y-axis)
+        sigma = radius * np.sin(theta)           # Shear stress (X-axis)
         
+        # Plot (sigma, tau) = (shear, normal)
         ax.fill(sigma, tau, color=color, alpha=0.15, zorder=2)
         ax.plot(sigma, tau, color=color, linewidth=2.5, label=label, zorder=5)
-        ax.plot([sigma_3, sigma_1], [0, 0], color=color, linewidth=2.5, zorder=4)
-        ax.scatter([sigma_3, sigma_1], [0, 0], color=color, s=60, zorder=15, edgecolors='white', linewidths=1.5)
         
-        ax.annotate(f'sigma3={sigma_3:.0f}', (sigma_3, 0), textcoords="offset points",
-                   xytext=(0, -15), ha='center', fontsize=8, color=color)
-        ax.annotate(f'sigma1={sigma_1:.0f}', (sigma_1, 0), textcoords="offset points",
-                   xytext=(0, -15), ha='center', fontsize=8, color=color)
+        # Line on tau axis at sigma=0
+        ax.plot([0, 0], [tau_3, tau_1], color=color, linewidth=2.5, zorder=4)
+        ax.scatter([0, 0], [tau_3, tau_1], color=color, s=60, zorder=15, edgecolors='white', linewidths=1.5)
+        
+        # Annotations
+        ax.annotate(f'tau3={tau_3:.0f}', (0, tau_3), textcoords="offset points",
+                   xytext=(-15, 0), ha='right', fontsize=8, color=color)
+        ax.annotate(f'tau1={tau_1:.0f}', (0, tau_1), textcoords="offset points",
+                   xytext=(-15, 0), ha='right', fontsize=8, color=color)
     
     ax.axhline(y=0, color='#2c3e50', linewidth=1.2, zorder=2)
     ax.axvline(x=0, color='#2c3e50', linewidth=1.2, zorder=2)
     ax.grid(True, linestyle=':', alpha=0.5, color='#bdc3c7', zorder=0)
     
-    ax.set_xlabel('Normal Stress sigma (kPa)', fontsize=12, fontweight='medium')
-    ax.set_ylabel('Shear Stress tau (kPa)', fontsize=12, fontweight='medium')
+    # COURSE NOTATION labels
+    ax.set_xlabel('Shear Stress sigma (kPa)', fontsize=12, fontweight='medium')
+    ax.set_ylabel('Normal Stress tau (kPa)', fontsize=12, fontweight='medium')
     ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
     
     ax.legend(loc='upper right', fontsize=9, framealpha=0.95)
@@ -112,36 +126,39 @@ def plot_mohr_circles(
 
 
 def plot_direct_shear_data(
-    sigma_n_values: List[float],
-    tau_failure_values: List[float],
+    tau_n_values: List[float],
+    sigma_failure_values: List[float],
     fitted_c: float = None,
     fitted_phi_rad: float = None,
     title: str = "Direct Shear Test Results",
     figsize: Tuple[int, int] = (10, 7)
 ) -> plt.Figure:
-    """Plot direct shear test data with fitted envelope."""
+    """Plot direct shear test data with fitted envelope.
+    COURSE NOTATION: sigma = shear stress (X-axis), tau = normal stress (Y-axis)
+    """
     fig, ax = plt.subplots(figsize=figsize, facecolor='white')
     ax.set_facecolor('#fafafa')
     
-    ax.scatter(sigma_n_values, tau_failure_values, s=100, c='#3498db', 
+    # Plot (sigma, tau) = (shear, normal)
+    ax.scatter(sigma_failure_values, tau_n_values, s=100, c='#3498db', 
               edgecolors='white', linewidths=2, zorder=10, label='Test Data')
     
     if fitted_c is not None and fitted_phi_rad is not None:
-        max_sigma = max(sigma_n_values) * 1.2
-        sigma_line = np.linspace(0, max_sigma, 100)
-        tau_line = fitted_c + sigma_line * np.tan(fitted_phi_rad)
+        max_tau = max(tau_n_values) * 1.2
+        tau_line = np.linspace(0, max_tau, 100)
+        sigma_line = fitted_c + tau_line * np.tan(fitted_phi_rad)
         
         phi_deg = math.degrees(fitted_phi_rad)
         ax.plot(sigma_line, tau_line, 'r-', linewidth=2.5, 
                label=f'Envelope: c={fitted_c:.2f} kPa, phi={phi_deg:.1f} deg', zorder=5)
-        ax.scatter([0], [fitted_c], color='red', s=80, zorder=15, marker='s')
+        ax.scatter([fitted_c], [0], color='red', s=80, zorder=15, marker='s')
     
     ax.axhline(y=0, color='#2c3e50', linewidth=1)
     ax.axvline(x=0, color='#2c3e50', linewidth=1)
     ax.grid(True, linestyle=':', alpha=0.5)
     
-    ax.set_xlabel('Normal Stress sigma_n (kPa)', fontsize=12)
-    ax.set_ylabel('Shear Stress at Failure tau_f (kPa)', fontsize=12)
+    ax.set_xlabel('Shear Stress at Failure sigma_f (kPa)', fontsize=12)
+    ax.set_ylabel('Normal Stress tau_n (kPa)', fontsize=12)
     ax.set_title(title, fontsize=14, fontweight='bold')
     ax.legend(loc='upper left', fontsize=10)
     
@@ -155,8 +172,6 @@ def plot_direct_shear_data(
 def fit_envelope_to_circles(circles: List[Tuple[float, float]]) -> Tuple[float, float]:
     """
     Fit failure envelope as common tangent to Mohr circles.
-    This is a NUMERICAL/GRAPHICAL method, not a new formula.
-    
     Returns (c, phi_rad) that best fits as tangent to all circles.
     """
     if len(circles) < 2:
@@ -192,7 +207,6 @@ def fit_envelope_to_circles(circles: List[Tuple[float, float]]) -> Tuple[float, 
 
 
 def fig_to_base64(fig: plt.Figure) -> str:
-    """Convert matplotlib figure to base64 string for embedding."""
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
     buf.seek(0)
@@ -200,5 +214,4 @@ def fig_to_base64(fig: plt.Figure) -> str:
 
 
 def save_figure(fig: plt.Figure, filepath: str, format: str = 'png'):
-    """Save figure to file."""
     fig.savefig(filepath, format=format, dpi=150, bbox_inches='tight', facecolor='white')
