@@ -77,3 +77,10 @@ The app comes preloaded with Chapter 6 formulas:
 ## License
 
 MIT License
+
+## Contributors
+
+- Amir Wechtati
+- Mohamed Amine Sliti
+- Mohamed Chandoul
+- Badis Zammouri
