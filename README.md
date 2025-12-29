@@ -84,3 +84,11 @@ MIT License
 - Mohamed Amine Sliti
 - Mohamed Chandoul
 - Badis Zammouri
+
+## Contributors
+
+- Amir Wechtati
+- Mohamed Amine Sliti
+- Mohamed Chandoul
+- Badis Zammouri
+
