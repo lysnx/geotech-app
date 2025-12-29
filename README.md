@@ -1,62 +1,78 @@
 ﻿# Geotechnical Analysis Application
 
-A professional Python application for geotechnical engineering analysis, featuring Mohr Circle visualization and failure envelope calculations.
+A professional Python application for geotechnical engineering analysis with **Course-Strict Mode** - all calculations trace back to your course formulas.
 
 ## Features
 
-- **Mohr Circle Analysis**: Visualize stress states with publication-quality Mohr circle diagrams
-- **Failure Envelope Calculation**: Compute cohesion and friction angle from test data
-- **Interactive GUI**: Streamlit-based web interface for easy data input and visualization
-- **Plane Strain Consolidation**: Analysis with Mohr-Coulomb failure criterion evaluation
+### Course-Strict App (`course_geotech_app/`)
+- **Formula Catalog**: Editable JSON catalog - add/edit/remove formulas to match YOUR course
+- **Strict Mode Toggle**: Block any calculation not backed by catalog formulas
+- **Full Traceability**: Every result shows formula ID and course reference
+- **Triaxial Tests (CD/CU/UU)**: Multiple samples with automatic envelope fitting
+- **Direct Shear Test**: Plot tau vs sigma, compute c and phi
+- **Mohr Circles & Envelope**: Standard convention (sigma on X, tau on Y)
+- **Reports & Export**: HTML/PDF with formula traceability
 
-## Installation
+### Standard App (`streamlit_app.py`)
+- Consolidation analysis with Terzaghi theory
+- Mohr-Coulomb failure criterion evaluation
+- Safety factor calculation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/geotech-app.git
-   cd geotech-app
-   ```
+## Quick Start
 
-2. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate  # Windows
-   # or
-   source .venv/bin/activate  # Linux/Mac
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-### Streamlit Web Application
 ```bash
+# Clone the repository
+git clone https://github.com/lysnx/geotech-app.git
+cd geotech-app
+
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run Course-Strict App (RECOMMENDED)
+streamlit run course_geotech_app/app.py
+
+# Or run Standard App
 streamlit run streamlit_app.py
-```
-
-### Command Line
-```bash
-python main.py
 ```
 
 ## Project Structure
 
 ```
 geotech-app/
- src/                    # Source code modules
- streamlit_app.py        # Streamlit web application
- main.py                 # Main application entry point
- requirements.txt        # Python dependencies
+ course_geotech_app/     # Course-strict application
+    app.py              # Main Streamlit app
+    catalog/            # Formula catalog (JSON + parser)
+    engine/             # Calculation engine with traceability
+    plotting/           # Mohr circle visualization
+ src/                    # Core modules
+    core/               # Models, physics, simulation
+    vis/                # Plotting functions
+ streamlit_app.py        # Standard Streamlit app
+ requirements.txt
  README.md
 ```
+
+## Default Formula Catalog
+
+The app comes preloaded with Chapter 6 formulas:
+
+| ID | Name | Reference |
+|----|------|-----------|
+| MC_FAILURE | Mohr-Coulomb Failure | Chap6 p4 |
+| EFFECTIVE_STRESS | Effective Stress Principle | Chap6 p6 |
+| TRIAXIAL_TEST_TYPES | CD/CU/UU Rules | Chap6 p13-14 |
+| ENVELOPE_FROM_MOHR_CIRCLES | Graphical Envelope | Chap6 p17 |
+| UU_STRENGTH | Undrained Strength | Chap6 p20 |
 
 ## Requirements
 
 - Python 3.8+
-- See requirements.txt for full dependency list
+- Streamlit, NumPy, Matplotlib, Pandas
 
 ## License
 
